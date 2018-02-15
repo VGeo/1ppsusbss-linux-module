@@ -1,0 +1,8 @@
+COMPILE_PATH = /usr/local/angstrom/arm/bin/
+CROSS_COMPILE = $(COMPILE_PATH)/arm-angstrom-linux-gnueabi-
+
+LIBUSB_DIR = /usr/local/angstrom/arm/arm-angstrom-linux-gnueabi/usr/include/libusb-1.0/
+
+CFLAGS += -I$(LIBUSB_DIR)
+
+INTERMDIR = .pxa320

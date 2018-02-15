@@ -1,0 +1,15 @@
+ifeq "$(PLATFORM)" "PXA320"
+  include $(PROJ_TOPDIR)/Makedefs.pxa320
+else  
+  include $(PROJ_TOPDIR)/Makedefs.unix
+endif
+
+CC = $(CROSS_COMPILE)gcc
+AR = $(CROSS_COMPILE)ar
+OBJCOPY = $(CROSS_COMPILE)objcopy
+RANLIB =  $(CROSS_COMPILE)ranlib
+
+CFLAGS += -Os
+CFLAGS += -g -fno-delete-null-pointer-checks -Wall -Werror
+CFLAGS += -I$(PROJ_TOPDIR)
+CFLAGS += $(if $(USBDEBUG),-DUSBDEBUG=$(USBDEBUG))

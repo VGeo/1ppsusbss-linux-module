@@ -1,0 +1,55 @@
+# INSTALL_PATH - the path where you need to install $(TARG)
+# TARG - what to install
+install: $(TARG)
+	mkdir -p $(INSTALL_PATH)/
+	install -m 644 $(TARG) $(INSTALL_PATH)/
+
+# rule for dependencies refresh
+# INTERMDIR -- directory for intermediate files
+#
+${INTERMDIR}/%.d: $(INTERMDIR)/%.o
+
+# NOTE: this rule refreshes dependencies after compiling
+$(INTERMDIR)/%.o: %.c
+	$(CC) -c $< $(CFLAGS) -o $@ 
+#	@$(CC) $(CFLAGS) -MMD -c $< -o $@
+
+# SRCS -- list of source files
+-include $(filter %.d, $(patsubst %.c, ${INTERMDIR}/%.d, ${SRCS}))
+
+# INTERMDIR -- directory for intermediate files
+$(INTERMDIR): 
+	mkdir -p $(INTERMDIR)
+
+OBJS += $(patsubst %.c, $(INTERMDIR)/%.o, $(SRCS))
+OBJS += $(wildcard $(subdirs)/*.o)
+
+%.d: %.o
+
+%.o: %.c
+	$(CC) -c $< $(CFLAGS) -o $@
+
+#%.a: $(INTERMDIR) $(OBJS)
+#	$(AR) $(ARFLAGS) $(INTERMDIR)/$@ $(OBJS)
+
+#%.bin: .%.elf
+#	$(OBJCOPY) -R .eeprom  -O binary $< $@
+
+#.%.elf: $(INTERMDIR) $(OBJS) 
+%.bin: $(INTERMDIR) $(OBJS) 
+	$(CC) $(OBJS) $(LDFLAGS) -o $@
+	@echo "*******************"
+	@echo "Successfully built:"
+	@ls -l $@
+	@echo "*******************"
+
+clean:
+	@echo `pwd`
+	rm -rf $(INTERMDIR) $(TARGET) $(OBJS) $(TARGET).bin
+	rm -rf doc/ 	
+	rm -f README
+
+$(OBJS): $(INTERMDIR) Makefile
+
+-include $(OBJS:.o=.d) 
+
