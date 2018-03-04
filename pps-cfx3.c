@@ -3,15 +3,16 @@
 #include <linux/usb.h>
 #include <linux/timer.h>
 #include <linux/hrtimer.h>
+#include <linux/delay.h>
 
 #define BULK_EP_OUT 0x01
 #define BULK_EP_IN 0x81
 #define MAX_PKT_SIZE 512
 #define MIN(a,b) (((a) <= (b)) ? (a) : (b))
 
-#define SEND_DELAY_MAX		100000
+#define SEND_DELAY_MAX		100000000
 
-static unsigned int send_delay = 30000;
+static unsigned int send_delay = 100000000;
 MODULE_PARM_DESC(delay,
 	"Delay between setting and dropping the signal (ns)");
 module_param_named(delay, send_delay, uint, 0);
@@ -24,6 +25,8 @@ struct pps_generator_cyfx3 {
 	struct usb_device *usbd;	/* USB device */
 	struct hrtimer timer;
 	int attached;
+	int inprogress;
+	int calibr_done;
 
 	/* calibrated time between a hrtimer event and the reaction */
 	long hrtimer_error;
@@ -31,10 +34,80 @@ struct pps_generator_cyfx3 {
 	long port_write_time;		/* calibrated port write time (ns) */
 };
 
+/* calibrate port write time */
+#define PORT_NTESTS_SHIFT	5
+static void calibrate_port(struct pps_generator_cyfx3 *gen)
+{
+	struct usb_device *usbd = gen->usbd;
+	int i, ret = 0;
+	long acc = 0;
+	unsigned char *bulk_buf;
+	int wrote_cnt = 0;
+
+	bulk_buf = kzalloc(sizeof(char) * MAX_PKT_SIZE, GFP_KERNEL);
+	if (!bulk_buf) {
+	  	printk("cfx3 write: cannot allocate buf\n");
+		//return -ENOMEM;
+	}
+
+	for (i = 0; i < (1 << PORT_NTESTS_SHIFT); i++) {
+		struct timespec a, b;
+		unsigned long irq_flags;
+
+		local_irq_save(irq_flags);
+		getnstimeofday(&a);
+		//port->ops->write_control(port, NO_SIGNAL);
+		//USB BULK WRITE 0
+		/* Write the data into the bulk endpoint */
+		/*ret = usb_bulk_msg(usbd, usb_sndbulkpipe(usbd, BULK_EP_OUT),
+			bulk_buf, MAX_PKT_SIZE, &wrote_cnt, 5000);
+		if (ret)
+		{
+			printk(KERN_ERR "Bulk message returned %d\n", ret);
+		}*/
+		getnstimeofday(&b);
+		local_irq_restore(irq_flags);
+
+		b = timespec_sub(b, a);
+		acc += timespec_to_ns(&b);
+	}
+
+	gen->port_write_time = 10000;//acc >> PORT_NTESTS_SHIFT;
+	pr_info("port write takes %ldns\n", gen->port_write_time);
+}
+
+void gen_write_callback(struct urb *u)
+{
+	usb_free_urb(u);
+  	return;
+}
+
 static int pps_write(struct usb_device *usbd, u8 value)
 {
   	int ret = 0;
-	int wrote_cnt = 0;
+	unsigned char *buf;
+	struct urb *urb;
+	struct pps_generator_cyfx3 *gen = dev_get_drvdata(&usbd->dev);
+
+	gen->inprogress = 1;
+	buf = kzalloc(sizeof(char) * MAX_PKT_SIZE, GFP_ATOMIC);
+	buf[0] = value;
+	
+	urb = usb_alloc_urb(0, GFP_ATOMIC);
+	if (!urb) {
+		dev_err(&usbd->dev, "Failed to allocate a URB!\n");
+		return -ENOMEM;
+	}
+	
+
+	usb_fill_bulk_urb(urb, usbd,
+	    			usb_sndbulkpipe(usbd, BULK_EP_OUT),
+				buf,
+				MAX_PKT_SIZE,
+				gen_write_callback,
+				gen);
+	ret = usb_submit_urb(urb, GFP_ATOMIC);
+	//while(gen->inprogress != 0);
 /*	ret = usb_bulk_msg(usbd, usb_sndbulkpipe(usbd, BULK_EP_OUT),
 			&value, sizeof(value), &wrote_cnt, 5000);
 	dev_info(&usbd->dev, "wr %d, %d\n", wrote_cnt, ret);*/
@@ -49,6 +122,7 @@ static enum hrtimer_restart hrtimer_event(struct hrtimer *timer)
 	struct usb_device *usbd;
 	long lim, delta;
 	unsigned long flags;
+	int ret = 0;
 
 	/* We have to disable interrupts here. The idea is to prevent
 	 * other interrupts on the same processor to introduce random
@@ -65,6 +139,10 @@ static enum hrtimer_restart hrtimer_event(struct hrtimer *timer)
 	getnstimeofday(&ts1);
 	expire_time = ktime_to_timespec(hrtimer_get_softexpires(timer));
 	gen = container_of(timer, struct pps_generator_cyfx3, timer);
+	if (!gen->calibr_done) {
+	  	calibrate_port(gen);
+		gen->calibr_done = 1;
+	}
 	usbd = gen->usbd;
 	lim = NSEC_PER_SEC - send_delay - gen->port_write_time;
 
@@ -83,7 +161,9 @@ static enum hrtimer_restart hrtimer_event(struct hrtimer *timer)
 
 	/* set the signal */
 	//USB BULK WRITE 1
-	pps_write(usbd, 1);
+	ret = pps_write(usbd, 1);
+	if (ret)
+		printk(KERN_CRIT "r %d\n", ret);
 
 	/* busy loop until the time is right for a clear edge */
 	lim = NSEC_PER_SEC - gen->port_write_time;
@@ -94,7 +174,9 @@ static enum hrtimer_restart hrtimer_event(struct hrtimer *timer)
 	/* unset the signal */
 	//USB BULK WRITE 0
 	pps_write(usbd, 0);
-	printk(KERN_CRIT "low\n");
+	//printk(KERN_ERR "low\n");
+	if (ret)
+		printk(KERN_CRIT "r %d\n", ret);
 
 	getnstimeofday(&ts3);
 
@@ -129,34 +211,6 @@ done:
 	return HRTIMER_RESTART;
 }
 
-/* calibrate port write time */
-#define PORT_NTESTS_SHIFT	5
-static void calibrate_port(struct pps_generator_cyfx3 *gen)
-{
-	struct usb_device *usbd = gen->usbd;
-	int i;
-	long acc = 0;
-
-	for (i = 0; i < (1 << PORT_NTESTS_SHIFT); i++) {
-		struct timespec a, b;
-		unsigned long irq_flags;
-
-		local_irq_save(irq_flags);
-		getnstimeofday(&a);
-		//port->ops->write_control(port, NO_SIGNAL);
-		//USB BULK WRITE 0
-		pps_write(usbd, 0);
-		getnstimeofday(&b);
-		local_irq_restore(irq_flags);
-
-		b = timespec_sub(b, a);
-		acc += timespec_to_ns(&b);
-	}
-
-	gen->port_write_time = acc >> PORT_NTESTS_SHIFT;
-	pr_info("port write takes %ldns\n", gen->port_write_time);
-}
-
 static inline ktime_t next_intr_time(struct pps_generator_cyfx3 *gen)
 {
 	struct timespec ts;
@@ -183,12 +237,10 @@ static int pps_cfx3_probe(struct usb_interface *interface, const struct usb_devi
 
 	gen->usbd = usbd;
 	dev_set_drvdata(&usbd->dev, gen);
-	
+
 	gen->hrtimer_error = SAFETY_INTERVAL;
 	dev_info(&usbd->dev, "attached to usb device %d\n", usbd->devnum);
 	gen->attached = 1;
-
-	calibrate_port(gen);
 
 	hrtimer_init(&gen->timer, CLOCK_REALTIME, HRTIMER_MODE_ABS);
 	gen->timer.function = hrtimer_event;
