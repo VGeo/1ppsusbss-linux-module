@@ -4,7 +4,8 @@ KMODDIR = /lib/modules/$(CURRENT)/kernel
 PWD=$(shell pwd )
 
 TARGET1 = pps-cfx3
-obj-m += $(TARGET1).o
+TARGET2 = pps-cfx3-recv
+obj-m += $(TARGET1).o $(TARGET2).o
 
 default: all
 
