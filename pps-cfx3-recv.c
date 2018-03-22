@@ -42,7 +42,7 @@ static int pps_read(struct usb_device *usbd, u8 *value)
 	struct urb *urb;
 
 	buf = kzalloc(sizeof(char) * MAX_PKT_SIZE, GFP_ATOMIC);
-	buf[0] = value;
+	buf[0] = *value;
 	
 	urb = usb_alloc_urb(0, GFP_ATOMIC);
 	if (!urb) {
@@ -66,16 +66,64 @@ static int pps_recv_thread_callback(void *data)
 	struct pps_receiver_cyfx3 *r = data;
 	struct usb_device *usbd = r->usbd;
 	struct pps_event_time ts_assert, ts_clear;
+	int is_asserted = 0, ret = 0, read_cnt = 0;
+	unsigned char *buf;
+
+	buf = kzalloc(sizeof(char) * MAX_PKT_SIZE, GFP_ATOMIC);
+	if (!buf)
+	{
+		dev_err(&usbd->dev, "Cannot allocate usb buffer!\n");
+		return -ENOMEM;
+	}
 
 	while(!kthread_should_stop()) {
-		dev_info(&usbd->dev, "In recv thread\n");
-		pps_get_ts(&ts_assert);
-		pps_event(r->pps, &ts_assert, PPS_CAPTUREASSERT, NULL);
-		msleep(30);
-		pps_get_ts(&ts_clear);
-		pps_event(r->pps, &ts_clear, PPS_CAPTURECLEAR, NULL);
-		msleep(970);
+		//dev_info(&usbd->dev, "In recv thread\n");
+		ret = usb_bulk_msg(usbd, usb_rcvbulkpipe(usbd,
+			      BULK_EP_IN), buf, MAX_PKT_SIZE, &read_cnt, 1500);
+		if(ret == -ETIMEDOUT)
+		{
+			dev_err(&usbd->dev,
+			    "CAPTUREASSERT timeout\n");
+		}
+		else if (ret !=0) {
+			dev_err(&usbd->dev,
+			    "CAPTUREASSERT missed with error %d\n", ret);
+		}
+		else {
+			//dev_info(&usbd->dev, "get %d\n", buf[0]);
+			if(buf[0] != 1) {
+				pps_get_ts(&ts_assert);
+				pps_event(r->pps, &ts_assert, PPS_CAPTUREASSERT,
+			    					NULL);
+			}
+			else {
+				dev_info(&usbd->dev, "Skip clear event\n");
+			}
+		}
+
+		ret = 0;
+
+		ret = usb_bulk_msg(usbd, usb_rcvbulkpipe(usbd,
+			      BULK_EP_IN), buf, MAX_PKT_SIZE, &read_cnt, 300);
+		if (ret == -ETIMEDOUT) {
+			dev_err(&usbd->dev, "CAPTURECLEAR timeout\n");
+		}
+		else if(ret !=0) {
+			dev_err(&usbd->dev, "CAPTURECLEAR missed with error %d\n",
+			    ret);
+		}
+		else {
+			//dev_info(&usbd->dev, "get %d\n", buf[0]);
+			if (buf[0] == 1) {
+				pps_get_ts(&ts_clear);
+				pps_event(r->pps, &ts_clear, PPS_CAPTURECLEAR, NULL);
+			}
+			else {
+				dev_info(&usbd->dev, "Skip event\n");
+			}
+		}
 	}
+	kfree(buf);
 	return 0;
 }
 
@@ -93,8 +141,6 @@ static int pps_cfx3_probe(struct usb_interface *interface, const struct usb_devi
 		.owner = THIS_MODULE,
 		.dev = NULL
 	};
-
-	dev_info(&usbd->dev, "Try to register PPS source\n");
 
 	usbd = interface_to_usbdev(interface);
 
@@ -131,6 +177,7 @@ static void pps_cfx3_disconnect(struct usb_interface *interface)
 	if(kthread_stop(r->task)) {
 		dev_err(&usbd->dev, "Error on recv task stop\n");
 	}
+	pps_unregister_source(r->pps);
 	kfree(r);
 	dev_info(&usbd->dev, "Disconnect\n");
 }
