@@ -7,6 +7,8 @@ TARGET1 = pps-cfx3
 TARGET2 = pps-cfx3-recv
 obj-m += $(TARGET1).o $(TARGET2).o
 
+ccflags-y = -Wno-declaration-after-statement -mpopcnt -I/usr/lib/gcc/x86_64-pc-linux-gnu/7.3.1/include
+
 default: all
 
 all:
