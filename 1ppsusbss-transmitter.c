@@ -262,7 +262,7 @@ static void pps_cfx3_disconnect(struct usb_interface *interface)
  
 static struct usb_device_id pps_cfx3_table[] =
 {
-    { USB_DEVICE(0x04b4, 0x00f0) },
+    { USB_DEVICE(0x04b4, 0x00fa) },
     {} /* Terminating entry */
 };
 MODULE_DEVICE_TABLE (usb, pps_cfx3_table);

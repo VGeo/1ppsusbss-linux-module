@@ -35,38 +35,12 @@ void recv_read_callback(struct urb *u)
   	return;
 }
 
-static int pps_read(struct usb_device *usbd, u8 *value)
-{
-  	int ret = 0;
-	unsigned char *buf;
-	struct urb *urb;
-
-	buf = kzalloc(sizeof(char) * MAX_PKT_SIZE, GFP_ATOMIC);
-	buf[0] = *value;
-	
-	urb = usb_alloc_urb(0, GFP_ATOMIC);
-	if (!urb) {
-		dev_err(&usbd->dev, "Failed to allocate an URB!\n");
-		return -ENOMEM;
-	}
-	
-
-	usb_fill_bulk_urb(urb, usbd,
-	    			usb_rcvbulkpipe(usbd, BULK_EP_IN),
-				buf,
-				MAX_PKT_SIZE,
-				recv_read_callback,
-				NULL);
-	ret = usb_submit_urb(urb, GFP_ATOMIC);
-	return ret;
-}
-
 static int pps_recv_thread_callback(void *data)
 {
 	struct pps_receiver_cyfx3 *r = data;
 	struct usb_device *usbd = r->usbd;
 	struct pps_event_time ts_assert, ts_clear;
-	int is_asserted = 0, ret = 0, read_cnt = 0;
+	int ret = 0, read_cnt = 0;
 	unsigned char *buf;
 
 	buf = kzalloc(sizeof(char) * MAX_PKT_SIZE, GFP_ATOMIC);
