@@ -4,6 +4,7 @@
 #include <linux/timer.h>
 #include <linux/hrtimer.h>
 #include <linux/delay.h>
+#include <linux/slab.h>
 
 #define BULK_EP_OUT 0x01
 #define BULK_EP_IN 0x81
@@ -269,7 +270,7 @@ MODULE_DEVICE_TABLE (usb, pps_cfx3_table);
 
 static struct usb_driver pps_cfx3_driver =
 {
-	.name = "cfx3_pps_driver",
+	.name = "cfx3_pps_driver_tra",
 	.id_table = pps_cfx3_table,
 	.probe = pps_cfx3_probe,
 	.disconnect = pps_cfx3_disconnect,

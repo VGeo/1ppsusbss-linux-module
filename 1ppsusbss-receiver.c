@@ -7,6 +7,7 @@
 #include <linux/sched.h>
 #include <linux/kthread.h>
 #include <linux/pps_kernel.h>
+#include <linux/slab.h>
 
 #define BULK_EP_OUT 0x01
 #define BULK_EP_IN 0x81
@@ -65,7 +66,7 @@ static int pps_recv_thread_callback(void *data)
 		}
 		else {
 			//dev_info(&usbd->dev, "get %d\n", buf[0]);
-			if(buf[0] != 1) {
+			if(buf[0] != 0) {
 				pps_get_ts(&ts_assert);
 				pps_event(r->pps, &ts_assert, PPS_CAPTUREASSERT,
 			    					NULL);
@@ -88,7 +89,7 @@ static int pps_recv_thread_callback(void *data)
 		}
 		else {
 			//dev_info(&usbd->dev, "get %d\n", buf[0]);
-			if (buf[0] == 1) {
+			if (buf[0] == 0) {
 				pps_get_ts(&ts_clear);
 				pps_event(r->pps, &ts_clear, PPS_CAPTURECLEAR, NULL);
 			}
