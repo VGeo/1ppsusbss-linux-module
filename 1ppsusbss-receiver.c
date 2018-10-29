@@ -14,12 +14,10 @@
 #define MAX_PKT_SIZE 512
 #define MIN(a,b) (((a) <= (b)) ? (a) : (b))
 
-#define SEND_DELAY_MAX		100000000
-
-static unsigned int send_delay = 100000000;
-MODULE_PARM_DESC(delay,
-	"Delay between setting and dropping the signal (ns)");
-module_param_named(delay, send_delay, uint, 0);
+static unsigned int max_pulse_length = 525;
+MODULE_PARM_DESC(mp,
+	"Minimum pulse length in milliseconds. 525 ms by default.");
+module_param_named(mp, max_pulse_length , uint, 0);
 
 
 #define SAFETY_INTERVAL	3000	/* set the hrtimer earlier for safety (ns) */
@@ -79,7 +77,11 @@ static int pps_recv_thread_callback(void *data)
 		ret = 0;
 
 		ret = usb_bulk_msg(usbd, usb_rcvbulkpipe(usbd,
-			      BULK_EP_IN), buf, MAX_PKT_SIZE, &read_cnt, 300);
+                                   BULK_EP_IN),
+                                   buf,
+                                   MAX_PKT_SIZE,
+                                   &read_cnt,
+                                   max_pulse_length);
 		if (ret == -ETIMEDOUT) {
 			dev_err(&usbd->dev, "CAPTURECLEAR timeout\n");
 		}
