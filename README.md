@@ -32,8 +32,21 @@ Call **make** inside project directory. After successful building You'll get
 ### Transmitter
 
 Call **insmod 1ppsusbss-transmitter.ko** and connect the transmitter device.
+Transmitter will start generate signal in four seconds.
 
 ### Receiver
 
 You have to enable linux PPS subsystem at first. Call **modprobe pps-core**.
-Now You are able to load receiver module: **insmod 1ppsusbss-receiver.ko**
+Now You are able to load the receiver module: **insmod 1ppsusbss-receiver.ko**
+and connect the receiver device.
+
+Now You are able to go to */sys/class/pps/ppsX* directory (where X is a number
+like 0 or 1 or 2, etc) and read _assert_ and _clear_ files.
+This files contain rising and falling signal timestamps.
+
+You cat watch them with command like:
+
+```
+watch -n 0.1 cat assert
+```
+
