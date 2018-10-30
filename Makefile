@@ -8,7 +8,7 @@ TARGET2 = 1ppsusbss-receiver
 
 obj-m += $(TARGET1).o $(TARGET2).o
 
-ccflags-y = -Wno-declaration-after-statement -mpopcnt -I/usr/lib/gcc/x86_64-pc-linux-gnu/7.3.1/include
+ccflags-y = -Wno-declaration-after-statement -mpopcnt -fno-pie
 
 default: all
 
@@ -20,6 +20,7 @@ clean:
 	@rm -f .*.*.cmd *~ *.*~ TODO.* 
 	@rm -fR .tmp*
 	@rm -rf .tmp_versions 
+	@rm -f *.ko *.symvers
 
 disclean: clean 
 	@rm *.ko *.symvers
