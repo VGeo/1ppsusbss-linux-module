@@ -1,9 +1,0 @@
-CROSS_COMPILE = 
-
-LIBUSB_H_DIR = /usr/include/libusb-1.0/
-
-CFLAGS += -I$(LIBUSB_H_DIR)
-
-
-INTERMDIR = .i386
-
